@@ -1,0 +1,507 @@
+{% extends "base.html" %}
+
+{% block page_title %}Server Management{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-server me-2"></i>Authentication Server Management
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- Server Status -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <h6>Current Status</h6>
+                        <div id="server-status" class="alert alert-warning">
+                            <i class="fas fa-times-circle me-2"></i>Server is stopped
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Configuration</h6>
+                        <ul class="list-unstyled" id="server-config-list">
+                            <li><strong>Host:</strong> <span id="config-host">0.0.0.0</span></li>
+                            <li><strong>Port:</strong> <span id="config-port">443</span></li>
+                            <li><strong>SSL Cert:</strong> <span id="config-cert">fullchain.pem</span></li>
+                        </ul>
+                    </div>
+                </div>
+                <!-- Server Configuration Form -->
+                <form id="server-config-form">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="host" class="form-label">Host</label>
+                                <input type="text" class="form-control" id="host" name="host" value="0.0.0.0" placeholder="0.0.0.0">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="port" class="form-label">Port</label>
+                                <input type="number" class="form-control" id="port" name="port" value="443" placeholder="443">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="ssl_cert" class="form-label">SSL Certificate Path</label>
+                                <input type="text" class="form-control" id="ssl_cert" name="ssl_cert" value="fullchain.pem" placeholder="fullchain.pem">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="ssl_key" class="form-label">SSL Private Key Path</label>
+                                <input type="text" class="form-control" id="ssl_key" name="ssl_key" value="privkey.pem" placeholder="privkey.pem">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="client_id" class="form-label">GitHub Client ID</label>
+                                <input type="text" class="form-control" id="client_id" name="client_id" value="178c6fc778ccc68e1d6a" placeholder="GitHub Client ID">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="org_name" class="form-label">Organization Name</label>
+                                <input type="text" class="form-control" id="org_name" name="org_name" value="GitHub" placeholder="GitHub">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="dev_mode" name="dev_mode" checked>
+                                <label class="form-check-label" for="dev_mode">
+                                    <i class="fas fa-wrench me-2"></i>Development Mode
+                                    <small class="text-muted d-block">Auto-generate self-signed certificates and use dev-friendly settings</small>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 mb-3">
+                        <button type="button" id="start-server-btn" class="btn btn-success">
+                            <i class="fas fa-play me-2"></i>Start Server
+                        </button>
+                        <button type="button" id="stop-server-btn" class="btn btn-danger" disabled>
+                            <i class="fas fa-stop me-2"></i>Stop Server
+                        </button>
+                        <button type="button" id="restart-server-btn" class="btn btn-warning" disabled>
+                            <i class="fas fa-redo me-2"></i>Restart Server
+                        </button>
+                    </div>
+                </form>
+                <!-- Allowlist Management (UI only) -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="fas fa-envelope me-2"></i>Email Allowlist</h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="allowlistContainer">
+                            <!-- Allowlist entries will be loaded here -->
+                        </div>
+                        <div class="mt-3">
+                            <div class="input-group">
+                                <input type="email" class="form-control" id="newEmailInput" placeholder="Add email to allowlist">
+                                <button class="btn btn-primary">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-info-circle me-2"></i>Server Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <h6>Endpoints</h6>
+                <ul class="list-unstyled">
+                    <li><code>POST /ingest</code> - Authentication endpoint</li>
+                    <li><code>OPTIONS /ingest</code> - CORS preflight</li>
+                </ul>
+                <h6 class="mt-3">Requirements</h6>
+                <ul class="list-unstyled">
+                    <li><i class="fas fa-check-circle text-success me-2"></i>SSL certificates (auto-generated in dev mode)</li>
+                    <li><i class="fas fa-check-circle text-success me-2"></i>Port access (auto-fallback in dev mode)</li>
+                    <li><i class="fas fa-check-circle text-success me-2"></i>Email allowlist configured</li>
+                </ul>
+                <h6 class="mt-3">Security Features</h6>
+                <ul class="list-unstyled">
+                    <li><i class="fas fa-shield-alt text-primary me-2"></i>Email allowlisting</li>
+                    <li><i class="fas fa-shield-alt text-primary me-2"></i>HTTPS only</li>
+                    <li><i class="fas fa-shield-alt text-primary me-2"></i>CORS protection</li>
+                    <li><i class="fas fa-shield-alt text-primary me-2"></i>Request logging</li>
+                </ul>
+                <div class="alert alert-info mt-3">
+                    <h6><i class="fas fa-wrench me-2"></i>Development Mode</h6>
+                    <small>When enabled, automatically generates self-signed certificates and uses dev-friendly port fallback. ⚠️ For development only!</small>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-users me-2"></i>Active Sessions
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">No active sessions</p>
+                <small class="text-muted">Active authentication sessions will appear here</small>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Server Logs: now full width below main row -->
+<div class="row">
+    <div class="col-md-12">
+        <div class="card mt-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-file-alt me-2"></i>Server Logs
+                </h5>
+            </div>
+            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                <pre id="server-logs" class="mb-0 text-light bg-dark p-2 rounded" style="font-size: 0.9em; min-height: 120px;">Loading logs...</pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function updateServerStatus() {
+    const statusDiv = document.getElementById('server-status');
+    const startBtn = document.getElementById('start-server-btn');
+    const stopBtn = document.getElementById('stop-server-btn');
+    const restartBtn = document.getElementById('restart-server-btn');
+    try {
+        const response = await fetch('/api/stats');
+        const data = await response.json();
+        if (data.server_running) {
+            statusDiv.className = 'alert alert-success';
+            statusDiv.innerHTML = '<i class="fas fa-check-circle me-2"></i>Server is running';
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            restartBtn.disabled = false;
+        } else {
+            statusDiv.className = 'alert alert-warning';
+            statusDiv.innerHTML = '<i class="fas fa-times-circle me-2"></i>Server is stopped';
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            restartBtn.disabled = true;
+        }
+    } catch (e) {
+        statusDiv.className = 'alert alert-danger';
+        statusDiv.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>Error fetching status';
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        restartBtn.disabled = true;
+    }
+}
+
+document.getElementById('start-server-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('start-server-btn');
+    btn.disabled = true;
+    // Collect form values
+    const host = document.getElementById('host').value;
+    const port = document.getElementById('port').value;
+    const ssl_cert = document.getElementById('ssl_cert').value;
+    const ssl_key = document.getElementById('ssl_key').value;
+    const client_id = document.getElementById('client_id').value;
+    const org_name = document.getElementById('org_name').value;
+    const dev_mode = document.getElementById('dev_mode').checked;
+    const payload = {
+        host,
+        port,
+        ssl_cert,
+        ssl_key,
+        client_id,
+        org_name,
+        dev_mode
+    };
+    try {
+        const response = await fetch('/api/server/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+            showAlert('Server started successfully.', 'success');
+        } else {
+            showAlert(data.error || 'Failed to start server.', 'danger');
+        }
+    } catch (e) {
+        showAlert('Error starting server: ' + e, 'danger');
+    }
+    setTimeout(updateServerStatus, 1000);
+});
+
+document.getElementById('stop-server-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('stop-server-btn');
+    btn.disabled = true;
+    try {
+        const response = await fetch('/api/server/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+            showAlert('Server stop initiated.', 'success');
+        } else {
+            showAlert(data.error || 'Failed to stop server.', 'danger');
+        }
+    } catch (e) {
+        showAlert('Error stopping server: ' + e, 'danger');
+    }
+    setTimeout(updateServerStatus, 1000);
+});
+
+document.getElementById('restart-server-btn').addEventListener('click', async () => {
+    document.getElementById('stop-server-btn').disabled = true;
+    document.getElementById('start-server-btn').disabled = true;
+    try {
+        // Stop server
+        const stopResponse = await fetch('/api/server/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const stopData = await stopResponse.json();
+        if (!(stopResponse.ok && stopData.success)) {
+            showAlert(stopData.error || 'Failed to stop server for restart.', 'danger');
+            setTimeout(updateServerStatus, 1000);
+            return;
+        }
+        // Wait a bit before starting
+        setTimeout(async () => {
+            // Collect form values (same as start)
+            const host = document.getElementById('host').value;
+            const port = document.getElementById('port').value;
+            const ssl_cert = document.getElementById('ssl_cert').value;
+            const ssl_key = document.getElementById('ssl_key').value;
+            const client_id = document.getElementById('client_id').value;
+            const org_name = document.getElementById('org_name').value;
+            const dev_mode = document.getElementById('dev_mode').checked;
+            const payload = {
+                host,
+                port,
+                ssl_cert,
+                ssl_key,
+                client_id,
+                org_name,
+                dev_mode
+            };
+            try {
+                const startResponse = await fetch('/api/server/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const startData = await startResponse.json();
+                if (startResponse.ok && startData.success) {
+                    showAlert('Server restarted successfully.', 'success');
+                } else {
+                    showAlert(startData.error || 'Failed to restart server.', 'danger');
+                }
+            } catch (e) {
+                showAlert('Error restarting server: ' + e, 'danger');
+            }
+            setTimeout(updateServerStatus, 1000);
+        }, 1000);
+    } catch (e) {
+        showAlert('Error stopping server for restart: ' + e, 'danger');
+        setTimeout(updateServerStatus, 1000);
+    }
+});
+
+function updateCertFieldsDisabled() {
+    const devMode = document.getElementById('dev_mode').checked;
+    document.getElementById('ssl_cert').disabled = devMode;
+    document.getElementById('ssl_key').disabled = devMode;
+}
+
+document.getElementById('dev_mode').addEventListener('change', updateCertFieldsDisabled);
+// Run on page load
+updateCertFieldsDisabled();
+
+// Initial status update on page load
+updateServerStatus();
+
+// --- Allowlist Management ---
+async function fetchAllowlist() {
+    const container = document.getElementById('allowlistContainer');
+    container.innerHTML = '<div class="text-center text-muted"><i class="fas fa-spinner fa-spin fa-2x mb-2"></i><p>Loading allowlist...</p></div>';
+    try {
+        const response = await fetch('/api/allowlist');
+        const data = await response.json();
+        if (response.ok && data.allowlist) {
+            if (data.allowlist.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted"><i class="fas fa-inbox fa-2x mb-2"></i><p>No emails in allowlist</p></div>';
+            } else {
+                container.innerHTML = '<ul class="list-group mb-2" id="allowlist-list"></ul>';
+                const list = document.getElementById('allowlist-list');
+                data.allowlist.forEach(email => {
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                    li.innerHTML = `<span>${email}</span><button class="btn btn-sm btn-outline-danger" data-email="${email}"><i class="fas fa-trash"></i></button>`;
+                    list.appendChild(li);
+                });
+                // Add remove handlers
+                list.querySelectorAll('button[data-email]').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        const email = btn.getAttribute('data-email');
+                        btn.disabled = true;
+                        const resp = await fetch('/api/allowlist', {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email })
+                        });
+                        const result = await resp.json();
+                        if (resp.ok && result.success) {
+                            showAlert('Removed from allowlist.', 'success');
+                            fetchAllowlist();
+                        } else {
+                            showAlert(result.error || 'Failed to remove.', 'danger');
+                            btn.disabled = false;
+                        }
+                    });
+                });
+            }
+        } else {
+            container.innerHTML = '<div class="text-danger">Failed to load allowlist.</div>';
+        }
+    } catch (e) {
+        container.innerHTML = '<div class="text-danger">Error loading allowlist.</div>';
+    }
+}
+
+// Add email to allowlist
+const addBtn = document.querySelector('.input-group button');
+const addInput = document.getElementById('newEmailInput');
+addInput.disabled = false;
+addBtn.disabled = false;
+addBtn.addEventListener('click', async () => {
+    const email = addInput.value.trim();
+    if (!email) return;
+    addBtn.disabled = true;
+    addInput.disabled = true;
+    const resp = await fetch('/api/allowlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+    });
+    const result = await resp.json();
+    if (resp.ok && result.success) {
+        showAlert('Added to allowlist.', 'success');
+        addInput.value = '';
+        fetchAllowlist();
+    } else {
+        showAlert(result.error || 'Failed to add.', 'danger');
+    }
+    addBtn.disabled = false;
+    addInput.disabled = false;
+});
+
+// Initial fetch
+fetchAllowlist();
+
+// --- Server Logs ---
+let logsFirstLoad = true;
+async function fetchServerLogs() {
+    const logsPre = document.getElementById('server-logs');
+    // Save scroll position
+    const prevScrollTop = logsPre.scrollTop;
+    const prevScrollHeight = logsPre.scrollHeight;
+    const isAtBottom = (prevScrollTop + logsPre.clientHeight) >= (prevScrollHeight - 10);
+    const prevContent = logsPre.textContent;
+    if (logsFirstLoad) {
+        logsPre.textContent = 'Loading logs...';
+    }
+    try {
+        const response = await fetch('/api/logs');
+        const data = await response.json();
+        let newContent = '';
+        if (response.ok && data.logs) {
+            if (data.logs.length === 0) {
+                newContent = 'No logs found.';
+            } else {
+                newContent = data.logs.map(log =>
+                    `[${log.timestamp}] ${log.message}`
+                ).join('\n');
+            }
+        } else {
+            newContent = 'Failed to load logs.';
+        }
+        // Only update if content changed
+        if (logsPre.textContent !== newContent) {
+            logsPre.textContent = newContent;
+            // Restore scroll position
+            if (isAtBottom) {
+                logsPre.scrollTop = logsPre.scrollHeight;
+            } else {
+                logsPre.scrollTop = prevScrollTop;
+            }
+        }
+    } catch (e) {
+        if (logsFirstLoad) {
+            logsPre.textContent = 'Error loading logs.';
+        }
+        // On poll errors, do not clear logs
+    }
+    logsFirstLoad = false;
+}
+// Poll logs every 5 seconds
+setInterval(fetchServerLogs, 5000);
+// Initial fetch
+fetchServerLogs();
+
+// --- Active Sessions ---
+async function fetchActiveSessions() {
+    const container = document.querySelector('.card .card-header .fa-users').closest('.card').querySelector('.card-body');
+    container.innerHTML = '<div class="text-center text-muted"><i class="fas fa-spinner fa-spin fa-2x mb-2"></i><p>Loading active sessions...</p></div>';
+    try {
+        const response = await fetch('/api/active_sessions');
+        const data = await response.json();
+        if (response.ok && data.active_sessions) {
+            if (data.active_sessions.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted"><i class="fas fa-inbox fa-2x mb-2"></i><p>No active sessions</p></div>';
+            } else {
+                let html = '<ul class="list-group mb-2">';
+                data.active_sessions.forEach(session => {
+                    html += `<li class="list-group-item d-flex flex-column">
+                        <span><strong>Email:</strong> ${session.email || '<em>Unknown</em>'}</span>
+                        <span><strong>IP:</strong> ${session.ip_address || '<em>Unknown</em>'}</span>
+                        <span><strong>Started:</strong> ${session.timestamp || '<em>Unknown</em>'}</span>
+                    </li>`;
+                });
+                html += '</ul>';
+                container.innerHTML = html;
+            }
+        } else {
+            container.innerHTML = '<div class="text-danger">Failed to load active sessions.</div>';
+        }
+    } catch (e) {
+        container.innerHTML = '<div class="text-danger">Error loading active sessions.</div>';
+    }
+}
+// Poll every 5 seconds
+setInterval(fetchActiveSessions, 5000);
+// Initial fetch
+fetchActiveSessions();
+</script>
+{% endblock %} 

