@@ -146,13 +146,12 @@ class GitHubAuthServer:
         """Configure CORS settings."""
         CORS(
             self.app,
-            resources={
-                r"/ingest": {
-                    "origins": ["*"],
-                    "methods": ["POST", "OPTIONS"],
-                    "allow_headers": ["Content-Type"],
-                }
-            },
+            origins=["*"],
+            methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
+            supports_credentials=False,
+            send_wildcard=True,
+            automatic_options=True
         )
 
     def _log_data(self, data: dict, prefix: str = ""):
@@ -180,14 +179,8 @@ class GitHubAuthServer:
     def _setup_routes(self):
         """Set up Flask routes."""
 
-        @self.app.route("/ingest", methods=["POST", "OPTIONS"])
+        @self.app.route("/ingest", methods=["POST"])
         def handle_auth():
-            if request.method == "OPTIONS":
-                response = make_response()
-                response.headers.add("Access-Control-Allow-Headers", "Content-Type")
-                response.headers.add("Access-Control-Allow-Methods", "POST")
-                response.headers.add("Access-Control-Allow-Origin", "*")
-                return response
 
             try:
                 visitor_data = request.get_json(silent=True) or {}
@@ -213,9 +206,7 @@ class GitHubAuthServer:
                     error_msg = "Email is required"
                     self._log_data({"error": error_msg}, "Validation Error")
                     error_response = {"status": "error", "message": error_msg}
-                    response = make_response(jsonify(error_response))
-                    response.headers.add("Access-Control-Allow-Origin", "*")
-                    return response, 400
+                    return jsonify(error_response), 400
 
                 # Check if email is allowlisted (reloads file each time)
                 if not self.is_email_allowlisted(email):
@@ -229,9 +220,7 @@ class GitHubAuthServer:
                         "status": "error",
                         "message": "Access denied",  # Generic error for security
                     }
-                    response = make_response(jsonify(error_response))
-                    response.headers.add("Access-Control-Allow-Origin", "*")
-                    return response, 403
+                    return jsonify(error_response), 403
 
                 print(f"\n✅ Allowlisted email accepted: {email}")
 
@@ -260,9 +249,7 @@ class GitHubAuthServer:
 
                 self._log_data(response_data, "Response Data")
 
-                response = make_response(jsonify(response_data))
-                response.headers.add("Access-Control-Allow-Origin", "*")
-                return response, 200
+                return jsonify(response_data), 200
 
             except Exception as e:
                 error_data = {
@@ -271,9 +258,7 @@ class GitHubAuthServer:
                     "timestamp": datetime.now().isoformat(),
                 }
                 self._log_data(error_data, "Error")
-                response = make_response(jsonify(error_data))
-                response.headers.add("Access-Control-Allow-Origin", "*")
-                return response, 500
+                return jsonify(error_data), 500
 
     def _start_polling_thread(
         self,
