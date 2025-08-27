@@ -26,7 +26,7 @@ from gitphish.core.gui.api.server_control_api import (
 class GitPhishGuiServer:
     """Web-based GUI interface for GitPhish."""
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 8080):
+    def __init__(self, host: str = "127.0.0.1", port: int = 8080):
         self.host = host
         self.port = port
         self.app = Flask(
